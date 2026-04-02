@@ -27,7 +27,7 @@ from sklearn.metrics import classification_report
 # Paths
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 DATA_PATH = BASE_DIR / "data" / "processed" / "cleaned_stroke_data.csv"
-OUTPUT_DIR = BASE_DIR / "notebooks" / "outputs" # I'll modify once the folder structure is finalized
+OUTPUT_DIR = BASE_DIR / "outputs"
 
 # Load dataset
 df = pd.read_csv(DATA_PATH)
