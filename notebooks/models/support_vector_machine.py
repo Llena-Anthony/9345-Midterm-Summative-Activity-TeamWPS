@@ -1,4 +1,21 @@
-# support_vector_machine.py
+# # ======================================
+# Programmer: Leo Delos Reyes
+# Date Programmed: April 02, 2026
+
+# Objectives:
+# Model 3 – Support Vector Machine (SVM)
+# Responsible for implementing an advanced classification model.
+
+# Tasks performed:
+# Load the processed dataset
+# Train a Support Vector Machine model
+# Perform basic parameter tuning
+# Evaluate model performance
+
+# Outputs:
+# outputs/svm_results.txt
+# # ======================================
+
 import pandas as pd
 import numpy as np
 from pathlib import Path
@@ -7,6 +24,7 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.svm import SVC
 from sklearn.metrics import classification_report, confusion_matrix, accuracy_score, roc_auc_score, roc_curve
 from sklearn.utils.class_weight import compute_class_weight
+from sklearn.metrics import roc_curve
 import matplotlib.pyplot as plt
 import seaborn as sns
 import joblib
@@ -21,6 +39,11 @@ SCRIPT_DIR = Path(__file__).resolve().parent.parent.parent
 # Path to your processed data file
 DATA_PATH = SCRIPT_DIR / "data" / "processed" / "cleaned_stroke_data.csv"
 
+#Path to store the result
+OUTPUT_PATH = SCRIPT_DIR / "data" / "outputs" / "svm_results.txt"
+OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
+
+ROC_IMG_PATH = SCRIPT_DIR / "data" / "outputs" / "roc_curve.png"
 
 # ============================================================================
 # LOAD DATA
@@ -32,9 +55,9 @@ def load_data():
         raise FileNotFoundError(f"Data file not found at: {DATA_PATH}")
 
     df = pd.read_csv(DATA_PATH)
-    print(f"✅ Data loaded from: {DATA_PATH}")
-    print(f"   Shape: {df.shape}")
-    print(f"   Columns: {df.columns.tolist()}")
+    print(f" Data loaded from: {DATA_PATH}")
+    print(f" Shape: {df.shape}")
+    print(f" Columns: {df.columns.tolist()}")
     return df
 
 
@@ -90,7 +113,7 @@ def train_model(df):
     y_pred = svm_model.predict(X_test_scaled)
     y_pred_proba = svm_model.predict_proba(X_test_scaled)[:, 1]
 
-    print(f"\n📈 Model Performance:")
+    print(f"\n Model Performance:")
     print(f"   Accuracy: {accuracy_score(y_test, y_pred):.4f}")
     print(f"   ROC-AUC: {roc_auc_score(y_test, y_pred_proba):.4f}")
 
@@ -101,25 +124,29 @@ def train_model(df):
     cm = confusion_matrix(y_test, y_pred)
     print(cm)
 
-    return svm_model, scaler, X.columns, X_test_scaled, y_test
+    acc = accuracy_score(y_test, y_pred)
+    roc = roc_auc_score(y_test, y_pred_proba)
+    report = classification_report(y_test, y_pred)
+    cm = confusion_matrix(y_test, y_pred)
 
+    # Write results to file
+    OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
+    with open(OUTPUT_PATH, "w") as f:
+        f.write("SVM STROKE PREDICTION RESULTS\n")
+        f.write("=" * 60 + "\n\n")
 
-# ============================================================================
-# SAVE MODEL
-# ============================================================================
+        f.write(f"Accuracy: {acc:.4f}\n")
+        f.write(f"ROC-AUC: {roc:.4f}\n\n")
 
-def save_model(model, scaler, feature_names):
-    """Save the trained model and scaler"""
-    # Create models directory if it doesn't exist
-    models_dir = SCRIPT_DIR / "models"
-    models_dir.mkdir(exist_ok=True)
+        f.write("Classification Report:\n")
+        f.write(report + "\n")
 
-    # Save files
-    joblib.dump(model, models_dir / 'stroke_svm_model.pkl')
-    joblib.dump(scaler, models_dir / 'scaler.pkl')
-    joblib.dump(feature_names, models_dir / 'feature_names.pkl')
+        f.write("Confusion Matrix:\n")
+        f.write(str(cm) + "\n")
 
-    print(f"\n💾 Model saved to: {models_dir}")
+    print(f"\n Results saved to: {OUTPUT_PATH}")
+
+    return svm_model, scaler, X.columns, X_test_scaled, y_test, y_pred_proba
 
 
 # ============================================================================
@@ -193,13 +220,40 @@ def test_predictions(model, scaler, feature_names, df):
 
         # Updated risk assessment with more appropriate thresholds
         if prob >= risk_thresholds['high']:
-            print(f"  🔴 HIGH RISK - Probability {prob:.1%}")
+            print(f"  HIGH RISK - Probability {prob:.1%}")
         elif prob >= risk_thresholds['moderate']:
-            print(f"  🟡 MODERATE RISK - Probability {prob:.1%}")
+            print(f"  MODERATE RISK - Probability {prob:.1%}")
         elif prob >= risk_thresholds['low']:
-            print(f"  🟢 LOW RISK - Probability {prob:.1%}")
+            print(f"  LOW RISK - Probability {prob:.1%}")
         else:
-            print(f"  ⚪ VERY LOW RISK - Probability {prob:.1%}")
+            print(f"  VERY LOW RISK - Probability {prob:.1%}")
+
+# ============================================================================
+# ROC CURVE PLOT
+# ============================================================================
+def plot_roc_curve(y_test, y_pred_proba):
+    """Plot and save ROC curve"""
+
+    fpr, tpr, thresholds = roc_curve(y_test, y_pred_proba)
+    auc_score = roc_auc_score(y_test, y_pred_proba)
+
+    # Ensure directory exists
+    ROC_IMG_PATH.parent.mkdir(parents=True, exist_ok=True)
+
+    plt.figure(figsize=(8, 6))
+    plt.plot(fpr, tpr, label=f"SVM (AUC = {auc_score:.2f})", color='blue')
+    plt.plot([0, 1], [0, 1], linestyle='--', color='gray')  # random baseline
+
+    plt.xlabel("False Positive Rate")
+    plt.ylabel("True Positive Rate")
+    plt.title("ROC Curve - Stroke Prediction")
+    plt.legend(loc="lower right")
+
+    # Save image
+    plt.savefig(ROC_IMG_PATH)
+    plt.close()
+
+    print(f" ROC curve saved to: {ROC_IMG_PATH}")
 
 # ============================================================================
 # MAIN EXECUTION
@@ -216,20 +270,19 @@ def main():
         df = load_data()
 
         # Train model
-        model, scaler, feature_names, X_test_scaled, y_test = train_model(df)
+        model, scaler, feature_names, X_test_scaled, y_test, y_pred_proba = train_model(df)
 
-        # Save model
-        save_model(model, scaler, feature_names)
+        plot_roc_curve(y_test, y_pred_proba)
 
         # Test predictions
         test_predictions(model, scaler, feature_names, df)
 
         print("\n" + "=" * 60)
-        print("✅ MODEL TRAINING COMPLETE!")
+        print("MODEL TRAINING COMPLETE!")
         print("=" * 60)
 
     except FileNotFoundError as e:
-        print(f"\n❌ Error: {e}")
+        print(f"\nError: {e}")
         print("\nPlease make sure your data file is at:")
         print(f"  {DATA_PATH}")
         print("\nYour project structure should look like:")
@@ -240,7 +293,7 @@ def main():
         print("          └── cleaned_stroke_data.csv")
 
     except Exception as e:
-        print(f"\n❌ Unexpected error: {e}")
+        print(f"\nUnexpected error: {e}")
         raise
 
 
