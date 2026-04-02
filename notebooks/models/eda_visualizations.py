@@ -8,7 +8,7 @@ import seaborn as sns
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 RAW_DATA_PATH = BASE_DIR / "data" / "raw" / "healthcare-dataset-stroke-data.csv"
 CLEANED_DATA_PATH = BASE_DIR / "data" / "processed" / "cleaned_stroke_data.csv"
-OUTPUTS_DIR = BASE_DIR / "notebooks" / "outputs"
+OUTPUTS_DIR = BASE_DIR / "outputs"
 
 KEY_FEATURES = ["age", "avg_glucose_level", "bmi"]
 
