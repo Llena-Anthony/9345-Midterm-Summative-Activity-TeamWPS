@@ -1,84 +1,53 @@
-# naive_bayes_pipeline.py
-
 from pathlib import Path
 import pandas as pd
 from sklearn.model_selection import train_test_split
 from sklearn.naive_bayes import GaussianNB
-from sklearn.metrics import (
-    accuracy_score,
-    f1_score,
-    precision_score,
-    recall_score,
-    confusion_matrix,
-    ConfusionMatrixDisplay
-)
-import matplotlib.pyplot as plt
+from sklearn.metrics import classification_report, accuracy_score
 
-# ==========================
 # Paths
-# ==========================
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 DATA_PATH = BASE_DIR / "data" / "processed" / "cleaned_stroke_data.csv"
-OUTPUT_DIR = BASE_DIR / "outputs"
+OUTPUT_DIR = BASE_DIR / "notebooks" / "outputs"
 
-# ==========================
 # Load dataset
-# ==========================
 df = pd.read_csv(DATA_PATH)
 
-# Separate features and target
+# Features and target
 X = df.drop("stroke", axis=1)
 y = df["stroke"]
 
-# ==========================
-# Train/Test split (stratified)
-# ==========================
-# Note: I think train-test-val is supposed to be the same across all the models. Remove this and replace with
-# calls to folders containing the split data.
-X_train, X_test, y_train, y_test = train_test_split(
-    X, y, test_size=0.2, random_state=42
-)
+# Note: I think train-test-val is supposed to be the same across all the models.
+# Remove this code block and replace with calls to folders containing the split data.
+# 1. First split: 90% train+val, 10% test
+X_train_val, X_test, y_train_val, y_test = train_test_split(X, y, test_size=0.1, random_state=42)
 
-# ==========================
-# Train Gaussian Naive Bayes
-# ==========================
+# 2. Second split: 80% of X_train_val goes to train, 20% to validation
+X_train, X_val, y_train, y_val = train_test_split(X_train_val, y_train_val, test_size=0.2, random_state=42)
+
+
+# Train model
 model = GaussianNB()
 model.fit(X_train, y_train)
 
-# ==========================
-# Predictions & Metrics
-# ==========================
-y_pred = model.predict(X_test)
+# Predict on validation
+y_val_pred = model.predict(X_val)
 
-accuracy = accuracy_score(y_test, y_pred)
-f1 = f1_score(y_test, y_pred, average="weighted")
-precision = precision_score(y_test, y_pred, average="weighted")
-recall = recall_score(y_test, y_pred, average="weighted")
-cm = confusion_matrix(y_test, y_pred, labels=[0, 1])
+# Predict on unseen data
+y_test_pred = model.predict(X_test)
 
-# ==========================
-# Save metrics to text file
-# ==========================
+# Generate reports
+val_report = classification_report(y_val, y_val_pred)
+test_report = classification_report(y_test, y_test_pred)
+
+# Save results
 results_path = OUTPUT_DIR / "naive_bayes_results.txt"
 with open(results_path, "w") as f:
-    f.write("Naive Bayes Stroke Prediction Results\n")
-    f.write("===============================\n")
-    f.write(f"Accuracy:  {accuracy:.4f}\n")
-    f.write(f"Weighted F1 Score: {f1:.4f}\n")
-    f.write(f"Weighted Precision: {precision:.4f}\n")
-    f.write(f"Weighted Recall: {recall:.4f}\n")
-    f.write("\nConfusion Matrix:\n")
-    f.write(str(cm))
-print(f"Results saved to: {results_path}")
+    f.write("Naive Bayes Validation Results\n")
+    f.write("==============================\n")
+    f.write(val_report + "\n\n")
 
-# ==========================
-# Save confusion matrix plot
-# ==========================
-disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=[0, 1])
-fig, ax = plt.subplots(figsize=(6, 6))
-disp.plot(ax=ax)
-plt.title("Naive Bayes Confusion Matrix")
-cm_path = OUTPUT_DIR / "naive_bayes_confusion_matrix.png"
-plt.savefig(cm_path, bbox_inches="tight")
-plt.close()
-print(f"Confusion matrix saved to: {cm_path}")
+    f.write("Naive Bayes Unseen Data Results\n")
+    f.write("===============================\n")
+    f.write(test_report)
+
+print(f"Results saved to: {results_path}")
