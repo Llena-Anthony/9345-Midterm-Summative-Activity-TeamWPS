@@ -17,131 +17,172 @@
 # outputs/naive_bayes_results.txt
 # # ======================================
 from pathlib import Path
-
 import pandas as pd
+import re
 import matplotlib.pyplot as plt
+import seaborn as sns
 
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import (
-    accuracy_score, precision_score, recall_score, f1_score,
-    confusion_matrix, ConfusionMatrixDisplay
-)
-from sklearn.linear_model import LogisticRegression
-from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import confusion_matrix
+from sklearn.naive_bayes import GaussianNB
 from sklearn.svm import SVC
+from sklearn.preprocessing import StandardScaler
+from sklearn.model_selection import train_test_split
+from imblearn.over_sampling import SMOTE
 
 
-BASE_DIR = Path(__file__).resolve().parent.parent.parent
-CLEANED_DATA_PATH = BASE_DIR / "data" / "processed" / "cleaned_stroke_data.csv"
-OUTPUTS_DIR = BASE_DIR / "outputs" / "model_evaluator"
-NAIVE_BAYES_OUTPUT_DIR = BASE_DIR / "outputs" / "naive_bayes"
-SVM_OUTPUT_DIR = BASE_DIR / "outputs" / "support_vector_machine"
 
-def ensure_output_dir():
-    OUTPUTS_DIR.mkdir(parents=True, exist_ok=True)
+BASE_DIR = Path(__file__).resolve().parent.parent
+DATA_DIR = BASE_DIR / "data" / "processed"
 
+NB_RESULTS = BASE_DIR / "outputs" / "naive_bayes_results.txt"
+SVM_RESULTS = BASE_DIR / "outputs" / "svm_results.txt"
 
-def load_data() -> pd.DataFrame:
-    """Load and preprocess dataset."""
-    if not CLEANED_DATA_PATH.exists():
-        raise FileNotFoundError(f"Cleaned dataset not found: {CLEANED_DATA_PATH}")
+OUTPUTS_DIR = BASE_DIR / "outputs"
+OUTPUTS_DIR.mkdir(parents=True, exist_ok=True)
 
-    df = pd.read_csv(CLEANED_DATA_PATH)
+if not NB_RESULTS.exists():
+    raise FileNotFoundError(f"Naive Bayes results not found at {NB_RESULTS}")
 
-    df = pd.get_dummies(df, drop_first=True)
+if not SVM_RESULTS.exists():
+    raise FileNotFoundError(f"SVM results not found at {SVM_RESULTS}")
 
-    return df
+# ==============================
+# EXTRACT NAIVE BAYES METRICS
+# ==============================
+def extract_nb_metrics():
+    with open(NB_RESULTS, "r") as f:
+        text = f.read()
 
+    acc = float(re.search(r"accuracy\s+([\d.]+)", text).group(1))
 
-def prepare_data(df: pd.DataFrame):
-    """Split dataset."""
-    X = df.drop(columns=["stroke"])
-    y = df["stroke"]
+    weighted = re.search(r"weighted avg\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)", text)
+    precision = float(weighted.group(1))
+    recall = float(weighted.group(2))
+    f1 = float(weighted.group(3))
 
-    return train_test_split(
-        X, y, test_size=0.2, random_state=42, stratify=y
-    )
-
-
-def compare_models():
-    nb = pd.read_csv(NAIVE_BAYES_OUTPUT_DIR / "naive_bayes_results.txt")
-    svm = pd.read_csv(SVM_OUTPUT_DIR / "svm_results.txt")
-
-    df = pd.concat([nb,svm], ignore_index=True)
-
-    df.to_csv(OUTPUTS_DIR / "model_comparison.csv", index=False)
-
-    best = df.loc[df["f1_score"].idxmax()]
-    print("Best Model:", best["model"])
+    return {
+        "model": "Naive Bayes",
+        "accuracy": acc,
+        "precision": precision,
+        "recall": recall,
+        "f1_score": f1
+    }
 
 
-def save_confusion_matrix(model, X_test, y_test, model_name: str):
-    """Generate confusion matrix plot."""
-    preds = model.predict(X_test)
-    cm = confusion_matrix(y_test, preds)
+# ==============================
+# EXTRACT SVM METRICS
+# ==============================
+def extract_svm_metrics():
+    with open(SVM_RESULTS, "r") as f:
+        text = f.read()
+
+    acc = float(re.search(r"Accuracy:\s+([\d.]+)", text).group(1))
+    precision = float(re.search(r"Precision:\s+([\d.]+)", text).group(1))
+    recall = float(re.search(r"Recall:\s+([\d.]+)", text).group(1))
+    f1 = float(re.search(r"F1-score:\s+([\d.]+)", text).group(1))
+
+    return {
+        "model": "SVM",
+        "accuracy": acc,
+        "precision": precision,
+        "recall": recall,
+        "f1_score": f1
+    }
+
+
+# ==============================
+# LOAD DATA (for confusion matrix)
+# ==============================
+def load_data():
+    X_train = pd.read_csv(DATA_DIR / "X_train.csv")
+    X_test = pd.read_csv(DATA_DIR / "X_test.csv")
+
+    y_train = pd.read_csv(DATA_DIR / "y_train.csv").values.ravel()
+    y_test = pd.read_csv(DATA_DIR / "y_test.csv").values.ravel()
+
+    return X_train, X_test, y_train, y_test
+
+
+# ==============================
+# RECREATE MODELS (for CM only)
+# ==============================
+def get_predictions(model_name, X_train, X_test, y_train):
+    if model_name == "Naive Bayes":
+        smote = SMOTE(random_state=42)
+        X_res, y_res = smote.fit_resample(X_train, y_train)
+
+        model = GaussianNB()
+        model.fit(X_res, y_res)
+        return model.predict(X_test)
+
+    elif model_name == "SVM":
+        smote = SMOTE(random_state=42)
+        X_res, y_res = smote.fit_resample(X_train, y_train)
+
+        scaler = StandardScaler()
+        X_res_scaled = scaler.fit_transform(X_res)
+        X_test_scaled = scaler.transform(X_test)
+
+        model = SVC(probability=True, random_state=42)
+        model.fit(X_res_scaled, y_res)
+        return model.predict(X_test_scaled)
+
+
+# ==============================
+# SAVE CONFUSION MATRIX
+# ==============================
+def save_confusion_matrix(y_true, y_pred, model_name):
+    cm = confusion_matrix(y_true, y_pred)
 
     plt.figure(figsize=(6, 5))
-    disp = ConfusionMatrixDisplay(confusion_matrix=cm)
-    disp.plot(cmap="Blues")
+    sns.heatmap(
+        cm,
+        annot=True,
+        fmt="d",
+        cmap="Blues",
+        xticklabels=["No Stroke", "Stroke"],
+        yticklabels=["No Stroke", "Stroke"]
+    )
 
     plt.title(f"Confusion Matrix ({model_name})")
+    plt.xlabel("Predicted")
+    plt.ylabel("Actual")
 
-    output_path = OUTPUTS_DIR / "confusion_matrix.png"
-    plt.savefig(output_path, dpi=300)
+    plt.tight_layout()
+    plt.savefig(OUTPUTS_DIR / "confusion_matrix.png", dpi=300)
     plt.close()
 
 
-def evaluate_models():
-    """Main evaluation logic."""
-    ensure_output_dir()
-
-    df = load_data()
-    X_train, X_test, y_train, y_test = prepare_data(df)
-
-    models = compare_models()
-
-    results = []
-    best_model = None
-    best_score = 0
-    best_name = ""
-
-    for name, model in models.items():
-        model.fit(X_train, y_train)
-        preds = model.predict(X_test)
-
-        acc = accuracy_score(y_test, preds)
-        precision = precision_score(y_test, preds, zero_division=0)
-        recall = recall_score(y_test, preds, zero_division=0)
-        f1 = f1_score(y_test, preds, zero_division=0)
-
-        results.append({
-            "model": name,
-            "accuracy": acc,
-            "precision": precision,
-            "recall": recall,
-            "f1_score": f1
-        })
-
-        if f1 > best_score:
-            best_score = f1
-            best_model = model
-            best_name = name
-
-    results_df = pd.DataFrame(results)
-    csv_path = OUTPUTS_DIR / "model_comparison.csv"
-    results_df.to_csv(csv_path, index=False)
-
-    print(f"Best Model: {best_name} (F1-score: {best_score:.4f})")
-
-    save_confusion_matrix(best_model, X_test, y_test, best_name)
-
-
+# ==============================
+# MAIN PIPELINE
+# ==============================
 def main():
-    evaluate_models()
+    nb = extract_nb_metrics()
+    svm = extract_svm_metrics()
 
-    print("Generated files:")
-    print(f"- {OUTPUTS_DIR / 'model_comparison.csv'}")
-    print(f"- {OUTPUTS_DIR / 'confusion_matrix.png'}")
+    df = pd.DataFrame([nb, svm])
+
+    # Save comparison
+    df.to_csv(OUTPUTS_DIR / "model_comparison.csv", index=False)
+
+    # Select best model (F1-score)
+    best = df.loc[df["f1_score"].idxmax()]
+    best_model = best["model"]
+
+    print("Best Model:", best_model)
+
+    # Load data
+    X_train, X_test, y_train, y_test = load_data()
+
+    # Recreate predictions (ONLY for confusion matrix)
+    y_pred = get_predictions(best_model, X_train, X_test, y_train)
+
+    # Save confusion matrix
+    save_confusion_matrix(y_test, y_pred, best_model)
+
+    print("Outputs generated:")
+    print("- model_comparison.csv")
+    print("- confusion_matrix.png")
 
 
 if __name__ == "__main__":
