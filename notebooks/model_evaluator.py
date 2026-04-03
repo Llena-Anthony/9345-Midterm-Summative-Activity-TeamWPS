@@ -6,7 +6,7 @@
 # Evaluation and comparison of all trained models (logistic_regression, naive_bayes, SVM)
 
 # Tasks performed:
-# Collect results from all models (idk how to)
+# Collect results from all models
 # Compute evaluation metrics (Accuracy, Precision, Recall, F1-Score)
 # Generate a confusion matrix
 # Identify the best-performing model
@@ -34,7 +34,7 @@ from imblearn.over_sampling import SMOTE
 BASE_DIR = Path(__file__).resolve().parent.parent
 DATA_DIR = BASE_DIR / "data" / "processed"
 
-NB_RESULTS = BASE_DIR / "outputs" / "naive_bayes_results.txt"
+NB_RESULTS = BASE_DIR / "outputs" / "naive_bayes" / "naive_bayes_results.txt"
 SVM_RESULTS = BASE_DIR / "outputs" / "svm_results.txt"
 
 OUTPUTS_DIR = BASE_DIR / "outputs"
@@ -46,6 +46,7 @@ if not NB_RESULTS.exists():
 if not SVM_RESULTS.exists():
     raise FileNotFoundError(f"SVM results not found at {SVM_RESULTS}")
 
+
 # ==============================
 # EXTRACT NAIVE BAYES METRICS
 # ==============================
@@ -53,16 +54,27 @@ def extract_nb_metrics():
     with open(NB_RESULTS, "r") as f:
         text = f.read()
 
-    acc = float(re.search(r"accuracy\s+([\d.]+)", text).group(1))
+    # 🔹 Extract accuracy safely
+    acc_match = re.search(r"(accuracy|Accuracy)[:\s]+([\d.]+)", text)
+    accuracy = float(acc_match.group(2)) if acc_match else 0.0
 
-    weighted = re.search(r"weighted avg\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)", text)
-    precision = float(weighted.group(1))
-    recall = float(weighted.group(2))
-    f1 = float(weighted.group(3))
+    # 🔹 Extract weighted avg safely
+    weighted_match = re.search(
+        r"weighted avg\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)",
+        text,
+        re.IGNORECASE
+    )
+
+    if weighted_match:
+        precision = float(weighted_match.group(1))
+        recall = float(weighted_match.group(2))
+        f1 = float(weighted_match.group(3))
+    else:
+        precision = recall = f1 = 0.0
 
     return {
         "model": "Naive Bayes",
-        "accuracy": acc,
+        "accuracy": accuracy,
         "precision": precision,
         "recall": recall,
         "f1_score": f1
@@ -152,7 +164,6 @@ def save_confusion_matrix(y_true, y_pred, model_name):
     plt.savefig(OUTPUTS_DIR / "confusion_matrix.png", dpi=300)
     plt.close()
 
-
 # ==============================
 # MAIN PIPELINE
 # ==============================
@@ -184,6 +195,8 @@ def main():
     print("- model_comparison.csv")
     print("- confusion_matrix.png")
 
+    print("NB:", nb)
+    print("SVM:", svm)
 
 if __name__ == "__main__":
     main()
