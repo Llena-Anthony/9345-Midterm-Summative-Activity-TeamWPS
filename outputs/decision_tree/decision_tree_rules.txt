@@ -1,0 +1,43 @@
+|--- age <= 47.50
+|   |--- bmi <= 45.70
+|   |   |--- avg_glucose_level <= 58.11
+|   |   |   |--- avg_glucose_level <= 57.63
+|   |   |   |   |--- class: 0
+|   |   |   |--- avg_glucose_level >  57.63
+|   |   |   |   |--- class: 1
+|   |   |--- avg_glucose_level >  58.11
+|   |   |   |--- age <= 1.36
+|   |   |   |   |--- class: 0
+|   |   |   |--- age >  1.36
+|   |   |   |   |--- class: 0
+|   |--- bmi >  45.70
+|   |   |--- avg_glucose_level <= 130.99
+|   |   |   |--- smoking_status_never smoked <= 0.50
+|   |   |   |   |--- class: 0
+|   |   |   |--- smoking_status_never smoked >  0.50
+|   |   |   |   |--- class: 0
+|   |   |--- avg_glucose_level >  130.99
+|   |   |   |--- class: 1
+|--- age >  47.50
+|   |--- age <= 73.50
+|   |   |--- avg_glucose_level <= 161.55
+|   |   |   |--- age <= 56.50
+|   |   |   |   |--- class: 0
+|   |   |   |--- age >  56.50
+|   |   |   |   |--- class: 1
+|   |   |--- avg_glucose_level >  161.55
+|   |   |   |--- bmi <= 49.05
+|   |   |   |   |--- class: 1
+|   |   |   |--- bmi >  49.05
+|   |   |   |   |--- class: 0
+|   |--- age >  73.50
+|   |   |--- bmi <= 35.60
+|   |   |   |--- work_type_Private <= 0.50
+|   |   |   |   |--- class: 1
+|   |   |   |--- work_type_Private >  0.50
+|   |   |   |   |--- class: 1
+|   |   |--- bmi >  35.60
+|   |   |   |--- bmi <= 41.15
+|   |   |   |   |--- class: 0
+|   |   |   |--- bmi >  41.15
+|   |   |   |   |--- class: 1

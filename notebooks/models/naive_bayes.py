@@ -27,7 +27,8 @@ from imblearn.over_sampling import SMOTE
 # Paths
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 DATA_DIR = BASE_DIR / "data" / "processed"
-OUTPUT_DIR = BASE_DIR / "outputs"
+OUTPUT_DIR = BASE_DIR / "outputs" / "naive_bayes"
+OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 # Load splits
 X_train = pd.read_csv(DATA_DIR / "X_train.csv")

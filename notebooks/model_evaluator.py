@@ -33,7 +33,9 @@ from sklearn.svm import SVC
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 CLEANED_DATA_PATH = BASE_DIR / "data" / "processed" / "cleaned_stroke_data.csv"
-OUTPUTS_DIR = BASE_DIR / "outputs"
+OUTPUTS_DIR = BASE_DIR / "outputs" / "model_evaluator"
+NAIVE_BAYES_OUTPUT_DIR = BASE_DIR / "outputs" / "naive_bayes"
+SVM_OUTPUT_DIR = BASE_DIR / "outputs" / "support_vector_machine"
 
 def ensure_output_dir():
     OUTPUTS_DIR.mkdir(parents=True, exist_ok=True)
@@ -62,8 +64,8 @@ def prepare_data(df: pd.DataFrame):
 
 
 def compare_models():
-    nb = pd.read_csv(OUTPUTS_DIR / "naive_bayes_results.txt")
-    svm = pd.read_csv(OUTPUTS_DIR / "svm_results.txt")
+    nb = pd.read_csv(NAIVE_BAYES_OUTPUT_DIR / "naive_bayes_results.txt")
+    svm = pd.read_csv(SVM_OUTPUT_DIR / "svm_results.txt")
 
     df = pd.concat([nb,svm], ignore_index=True)
 

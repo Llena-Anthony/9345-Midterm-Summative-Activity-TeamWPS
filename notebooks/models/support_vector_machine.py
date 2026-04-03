@@ -47,11 +47,12 @@ y_test = pd.read_csv(DATA_PATH / "y_test.csv").values.ravel()
 y_unseen = pd.read_csv(DATA_PATH / "y_unseen.csv").values.ravel()
 
 # Path to store the result
-OUTPUT_PATH = SCRIPT_DIR / "outputs" / "svm_results.txt"
-OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
+OUTPUT_DIR = SCRIPT_DIR / "outputs" / "support_vector_machine"
+OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+OUTPUT_PATH = OUTPUT_DIR / "svm_results.txt"
 
-ROC_IMG_PATH = SCRIPT_DIR / "outputs" / "roc_curve_SVM.png"
-CM_IMG_PATH = SCRIPT_DIR / "outputs" / "confusion_matrix_SVM.png"
+ROC_IMG_PATH = OUTPUT_DIR / "roc_curve_SVM.png"
+CM_IMG_PATH = OUTPUT_DIR / "confusion_matrix_SVM.png"
 
 
 # ======================================
