@@ -28,7 +28,7 @@ from imblearn.over_sampling import SMOTE
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 DATA_DIR = BASE_DIR / "data" / "processed"
-OUTPUT_DIR = BASE_DIR / "outputs"
+OUTPUT_DIR = BASE_DIR / "outputs" / "naive_bayes"
 OUTPUT_DIR.mkdir(exist_ok=True)
 
 # Load data
@@ -78,17 +78,24 @@ def evaluate_metrics(y_true, y_pred):
         "roc_auc": roc_auc_score(y_true, y_pred)
     }
 
-def save_confusion_matrix(y_true, y_pred, name):
+
+def plot_confusion_matrix(y_true, y_pred, name):
+    """Plot and save confusion matrix"""
     cm = confusion_matrix(y_true, y_pred)
+    plt.figure(figsize=(8, 6))
     sns.heatmap(cm, annot=True, fmt='d', cmap='Blues',
-                xticklabels=np.unique(y_true),
-                yticklabels=np.unique(y_true))
-    plt.xlabel('Predicted'); plt.ylabel('Actual')
-    plt.title(f'Confusion Matrix - {name}')
-    cm_path = OUTPUT_DIR / f'confusion_matrix_{name}.png'
-    plt.savefig(cm_path)
+                xticklabels=['No Stroke', 'Stroke'],
+                yticklabels=['No Stroke', 'Stroke'])
+    plt.title(f'Confusion Matrix - {name}', fontsize=14)
+    plt.ylabel('True Label', fontsize=12)
+    plt.xlabel('Predicted Label', fontsize=12)
+
+    # Save to OUTPUT_DIR
+    file_path = OUTPUT_DIR / f'confusion_matrix_{name}.png'
+    plt.savefig(file_path, dpi=300, bbox_inches='tight')
     plt.close()
-    return cm_path
+    return file_path
+
 
 # Predictions
 y_test_pred = model.predict(X_test)
@@ -99,8 +106,8 @@ test_metrics = evaluate_metrics(y_test, y_test_pred)
 unseen_metrics = evaluate_metrics(y_unseen, y_unseen_pred)
 
 # Save confusion matrices
-test_cm_path = save_confusion_matrix(y_test, y_test_pred, "test")
-unseen_cm_path = save_confusion_matrix(y_unseen, y_unseen_pred, "unseen")
+test_cm_path = plot_confusion_matrix(y_test, y_test_pred, "test")
+unseen_cm_path = plot_confusion_matrix(y_unseen, y_unseen_pred, "unseen")
 
 # Save CSV results
 metrics_list = list(scoring.keys())
