@@ -29,6 +29,7 @@ from sklearn.metrics import (
     recall_score,
     roc_auc_score,
 )
+from sklearn.model_selection import StratifiedKFold, cross_validate
 from sklearn.tree import DecisionTreeClassifier, export_text, plot_tree
 
 
@@ -111,6 +112,50 @@ def compute_metrics(y_true, y_pred, y_proba) -> dict[str, float]:
         "f1_score": f1_score(y_true, y_pred, zero_division=0),
         "specificity": tn / (tn + fp) if (tn + fp) else 0.0,
         "roc_auc": roc_auc_score(y_true, y_proba),
+    }
+
+
+def specificity_cv_score(estimator, X_data, y_data) -> float:
+    """Compute specificity for a fitted estimator during cross-validation."""
+    y_pred = estimator.predict(X_data)
+    cm = confusion_matrix(y_data, y_pred)
+    tn, fp, _, _ = cm.ravel()
+    return tn / (tn + fp) if (tn + fp) else 0.0
+
+
+def run_cross_validation() -> dict[str, float]:
+    """
+    Perform 10-fold stratified cross-validation on the training split only.
+
+    The fold scores are averaged to produce the Training (CV) column used in
+    the manuscript-ready metrics table.
+    """
+    cv = StratifiedKFold(n_splits=10, shuffle=True, random_state=RANDOM_STATE)
+    scoring = {
+        "accuracy": "accuracy",
+        "precision": "precision",
+        "recall": "recall",
+        "f1_score": "f1",
+        "specificity": specificity_cv_score,
+        "roc_auc": "roc_auc",
+    }
+
+    cv_results = cross_validate(
+        build_model(),
+        X_train,
+        y_train,
+        cv=cv,
+        scoring=scoring,
+        n_jobs=-1,
+    )
+
+    return {
+        "accuracy": cv_results["test_accuracy"].mean(),
+        "precision": cv_results["test_precision"].mean(),
+        "recall": cv_results["test_recall"].mean(),
+        "f1_score": cv_results["test_f1_score"].mean(),
+        "specificity": cv_results["test_specificity"].mean(),
+        "roc_auc": cv_results["test_roc_auc"].mean(),
     }
 
 
@@ -242,14 +287,34 @@ def evaluate_split(model: DecisionTreeClassifier, X_data: pd.DataFrame, y_data, 
     return metrics, report_df, matrix_df, labels_df
 
 
-def save_metrics_table(test_metrics: dict[str, float], unseen_metrics: dict[str, float]) -> pd.DataFrame:
-    """Save the core evaluation metrics as a single clean CSV summary table."""
+def save_metrics_table(
+    cv_metrics: dict[str, float], test_metrics: dict[str, float], unseen_metrics: dict[str, float]
+) -> pd.DataFrame:
+    """
+    Save the core evaluation metrics in a paper-ready table layout.
+
+    The requested manuscript format includes a Training (CV) column. Since this
+    script does not implement cross-validation, that column is preserved as N/A
+    rather than populating it with fabricated values.
+    """
+    metric_order = ["accuracy", "precision", "recall", "f1_score", "specificity", "roc_auc"]
+    metric_labels = {
+        "accuracy": "Accuracy",
+        "precision": "Precision",
+        "recall": "Recall",
+        "f1_score": "F1-score",
+        "specificity": "Specificity",
+        "roc_auc": "ROC-AUC",
+    }
+
     metrics_df = pd.DataFrame(
-        [
-            {"dataset_split": "test", **test_metrics},
-            {"dataset_split": "unseen", **unseen_metrics},
-        ]
-    ).round(4)
+        {
+            "Metric": [metric_labels[metric] for metric in metric_order],
+            "Training (CV)": [round(cv_metrics[metric], 4) for metric in metric_order],
+            "Test Set": [round(test_metrics[metric], 4) for metric in metric_order],
+            "Unseen Set": [round(unseen_metrics[metric], 4) for metric in metric_order],
+        }
+    )
     metrics_df.to_csv(METRICS_PATH, index=False)
     return metrics_df
 
@@ -271,6 +336,9 @@ def main() -> None:
     model = build_model()
     model.fit(X_train, y_train)
 
+    # Compute cross-validation results using the training split only.
+    cv_metrics = run_cross_validation()
+
     # Save interpretation artifacts before reporting metrics.
     importance_df = save_feature_importance(model)
     rules = save_rules(model)
@@ -281,7 +349,7 @@ def main() -> None:
     unseen_metrics, unseen_report_df, unseen_cm_df, unseen_cm_labels_df = evaluate_split(model, X_unseen, y_unseen, "Unseen")
 
     # Persist all summary metrics in a clean tabular format.
-    metrics_df = save_metrics_table(test_metrics, unseen_metrics)
+    metrics_df = save_metrics_table(cv_metrics, test_metrics, unseen_metrics)
 
     print("\nDecision Tree Metrics")
     print(metrics_df.to_string(index=False))

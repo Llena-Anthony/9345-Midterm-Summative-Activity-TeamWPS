@@ -1,3 +1,7 @@
-dataset_split,accuracy,precision,recall,f1_score,specificity,roc_auc
-test,0.8304,0.1792,0.6889,0.2844,0.8377,0.858
-unseen,0.8395,0.1647,0.56,0.2545,0.8539,0.7965
+Metric,Training (CV),Test Set,Unseen Set
+Accuracy,0.8486,0.8304,0.8395
+Precision,0.1604,0.1792,0.1647
+Recall,0.4859,0.6889,0.56
+F1-score,0.2403,0.2844,0.2545
+Specificity,0.8671,0.8377,0.8539
+ROC-AUC,0.8197,0.858,0.7965
