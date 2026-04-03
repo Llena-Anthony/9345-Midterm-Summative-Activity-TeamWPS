@@ -102,25 +102,22 @@ def extract_svm_metrics():
 # ==============================
 def extract_dt_metrics():
     df = pd.read_csv(DT_RESULTS)
-    df.columns = df.columns.str.strip().str.lower()
-    df["dataset_split"] = df["dataset_split"].str.strip().str.lower()
+    df.columns = df.columns.str.strip()
+    df["Metric"] = df["Metric"].str.strip().str.lower()
 
-    def get_val(split, metric):
-        row = df[df["dataset_split"] == split]
+    def get_val(metric):
+        row = df[df["Metric"] == metric]
         if row.empty:
-            print(f"WARNING: split '{split}' not found. Available: {df['dataset_split'].tolist()}")
+            print(f"WARNING: metric '{metric}' not found. Available: {df['Metric'].tolist()}")
             return 0.0
-        if metric not in df.columns:
-            print(f"WARNING: metric '{metric}' not found. Available: {df.columns.tolist()}")
-            return 0.0
-        return float(row[metric].values[0])
+        return float(row["Test Set"].values[0])
 
     return {
         "model": "Decision Tree",
-        "accuracy": get_val("test", "accuracy"),
-        "precision": get_val("test", "precision"),
-        "recall": get_val("test", "recall"),
-        "f1_score": get_val("test", "f1_score"),
+        "accuracy": get_val("accuracy"),
+        "precision": get_val("precision"),
+        "recall": get_val("recall"),
+        "f1_score": get_val("f1-score"),  # matches "F1-score" after lowercasing
     }
 
 # ==============================
@@ -128,25 +125,22 @@ def extract_dt_metrics():
 # ==============================
 def extract_rf_metrics():
     df = pd.read_csv(RF_RESULTS)
-    df.columns = df.columns.str.strip().str.lower()
-    df["dataset_split"] = df["dataset_split"].str.strip().str.lower()
+    df.columns = df.columns.str.strip()
+    df["Metric"] = df["Metric"].str.strip().str.lower()
 
-    def get_val(split, metric):
-        row = df[df["dataset_split"] == split]
+    def get_val(metric):
+        row = df[df["Metric"] == metric]
         if row.empty:
-            print(f"WARNING: split '{split}' not found. Available: {df['dataset_split'].tolist()}")
+            print(f"WARNING: metric '{metric}' not found. Available: {df['Metric'].tolist()}")
             return 0.0
-        if metric not in df.columns:
-            print(f"WARNING: metric '{metric}' not found. Available: {df.columns.tolist()}")
-            return 0.0
-        return float(row[metric].values[0])
+        return float(row["Test Set"].values[0])
 
     return {
         "model": "Random Forest",
-        "accuracy": get_val("test", "accuracy"),
-        "precision": get_val("test", "precision"),
-        "recall": get_val("test", "recall"),
-        "f1_score": get_val("test", "f1_score"),
+        "accuracy": get_val("accuracy"),
+        "precision": get_val("precision"),
+        "recall": get_val("recall"),
+        "f1_score": get_val("f1-score"),  # matches "F1-score" after lowercasing
     }
 
 # ==============================
