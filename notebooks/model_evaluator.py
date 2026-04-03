@@ -34,7 +34,7 @@ from imblearn.over_sampling import SMOTE
 BASE_DIR = Path(__file__).resolve().parent.parent
 DATA_DIR = BASE_DIR / "data" / "processed"
 
-NB_RESULTS = BASE_DIR / "outputs" / "naive_bayes" / "naive_bayes_results.txt"
+NB_RESULTS = BASE_DIR / "outputs" / "naive_bayes" / "naive_bayes_results.csv"
 SVM_RESULTS = BASE_DIR / "outputs" / "svm_results.txt"
 
 OUTPUTS_DIR = BASE_DIR / "outputs"
@@ -51,33 +51,20 @@ if not SVM_RESULTS.exists():
 # EXTRACT NAIVE BAYES METRICS
 # ==============================
 def extract_nb_metrics():
-    with open(NB_RESULTS, "r") as f:
-        text = f.read()
+    df = pd.read_csv(NB_RESULTS)
+    df.columns = df.columns.str.strip()
+    df["Metric"] = df["Metric"].str.strip().str.lower()
 
-    # 🔹 Extract accuracy safely
-    acc_match = re.search(r"(accuracy|Accuracy)[:\s]+([\d.]+)", text)
-    accuracy = float(acc_match.group(2)) if acc_match else 0.0
-
-    # 🔹 Extract weighted avg safely
-    weighted_match = re.search(
-        r"weighted avg\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)",
-        text,
-        re.IGNORECASE
-    )
-
-    if weighted_match:
-        precision = float(weighted_match.group(1))
-        recall = float(weighted_match.group(2))
-        f1 = float(weighted_match.group(3))
-    else:
-        precision = recall = f1 = 0.0
+    def get_val(metric):
+        row = df[df["Metric"] == metric]
+        return float(row["Test Set"].values[0]) if not row.empty else 0.0
 
     return {
         "model": "Naive Bayes",
-        "accuracy": accuracy,
-        "precision": precision,
-        "recall": recall,
-        "f1_score": f1
+        "accuracy": get_val("accuracy"),
+        "precision": get_val("precision"),
+        "recall": get_val("recall"),
+        "f1_score": get_val("f1"),
     }
 
 
