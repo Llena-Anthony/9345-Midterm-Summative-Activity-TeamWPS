@@ -12,9 +12,6 @@
 # Identify the best-performing model
 # Save results to outputs/confusion_matrix.png
 # Save results to outputs/model_comparison.csv
-
-# Outputs:
-# outputs/naive_bayes_results.txt
 # # ======================================
 from pathlib import Path
 import pandas as pd
@@ -35,7 +32,9 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 DATA_DIR = BASE_DIR / "data" / "processed"
 
 NB_RESULTS = BASE_DIR / "outputs" / "naive_bayes" / "naive_bayes_results.csv"
-SVM_RESULTS = BASE_DIR / "outputs" / "svm_results.txt"
+SVM_RESULTS = BASE_DIR / "outputs" /"support_vector_machine"/ "svm_results.csv"
+DT_RESULTS = BASE_DIR / "outputs" / "decision_tree" / "decision_tree_metrics.csv"
+RF_RESULTS = BASE_DIR / "outputs" / "random_forest" / "random_forest_metrics.csv"
 
 OUTPUTS_DIR = BASE_DIR / "outputs"
 OUTPUTS_DIR.mkdir(parents=True, exist_ok=True)
@@ -46,25 +45,35 @@ if not NB_RESULTS.exists():
 if not SVM_RESULTS.exists():
     raise FileNotFoundError(f"SVM results not found at {SVM_RESULTS}")
 
+if not DT_RESULTS.exists():
+    raise FileNotFoundError(f"Decision Tree results not found at {DT_RESULTS}")
+
+if not RF_RESULTS.exists():
+    raise FileNotFoundError(f"Random Forest results not found at {RF_RESULTS}")
 
 # ==============================
 # EXTRACT NAIVE BAYES METRICS
 # ==============================
 def extract_nb_metrics():
     df = pd.read_csv(NB_RESULTS)
+    print("NB Columns:", df.columns.tolist())
     df.columns = df.columns.str.strip()
+    print("NB Columns after strip:", df.columns.tolist())
     df["Metric"] = df["Metric"].str.strip().str.lower()
 
     def get_val(metric):
         row = df[df["Metric"] == metric]
-        return float(row["Test Set"].values[0]) if not row.empty else 0.0
 
+        if row.empty:
+            print(f"WARNING: metric '{metric}' not found. Available: {df['Metric'].tolist()}")
+            return 0.0
+        return float(row["Test_Set"].values[0])
     return {
         "model": "Naive Bayes",
         "accuracy": get_val("accuracy"),
         "precision": get_val("precision"),
         "recall": get_val("recall"),
-        "f1_score": get_val("f1"),
+        "f1_score": get_val("f1-score"),
     }
 
 
@@ -72,22 +81,73 @@ def extract_nb_metrics():
 # EXTRACT SVM METRICS
 # ==============================
 def extract_svm_metrics():
-    with open(SVM_RESULTS, "r") as f:
-        text = f.read()
+    df = pd.read_csv(SVM_RESULTS)
+    df.columns = df.columns.str.strip()
+    df["Metric"] = df["Metric"].str.strip().str.lower()
 
-    acc = float(re.search(r"Accuracy:\s+([\d.]+)", text).group(1))
-    precision = float(re.search(r"Precision:\s+([\d.]+)", text).group(1))
-    recall = float(re.search(r"Recall:\s+([\d.]+)", text).group(1))
-    f1 = float(re.search(r"F1-score:\s+([\d.]+)", text).group(1))
+    def get_val(metric):
+        row = df[df["Metric"] == metric]
+        return float(row["Test_Set"].values[0]) if not row.empty else 0.0
 
     return {
         "model": "SVM",
-        "accuracy": acc,
-        "precision": precision,
-        "recall": recall,
-        "f1_score": f1
+        "accuracy": get_val("accuracy"),
+        "precision": get_val("precision"),
+        "recall": get_val("recall"),
+        "f1_score": get_val("f1-score"),
     }
 
+# ==============================
+# EXTRACT DECISION TREE METRICS
+# ==============================
+def extract_dt_metrics():
+    df = pd.read_csv(DT_RESULTS)
+    df.columns = df.columns.str.strip().str.lower()
+    df["dataset_split"] = df["dataset_split"].str.strip().str.lower()
+
+    def get_val(split, metric):
+        row = df[df["dataset_split"] == split]
+        if row.empty:
+            print(f"WARNING: split '{split}' not found. Available: {df['dataset_split'].tolist()}")
+            return 0.0
+        if metric not in df.columns:
+            print(f"WARNING: metric '{metric}' not found. Available: {df.columns.tolist()}")
+            return 0.0
+        return float(row[metric].values[0])
+
+    return {
+        "model": "Decision Tree",
+        "accuracy": get_val("test", "accuracy"),
+        "precision": get_val("test", "precision"),
+        "recall": get_val("test", "recall"),
+        "f1_score": get_val("test", "f1_score"),
+    }
+
+# ==============================
+# EXTRACT RANDOM FOREST METRICS
+# ==============================
+def extract_rf_metrics():
+    df = pd.read_csv(RF_RESULTS)
+    df.columns = df.columns.str.strip().str.lower()
+    df["dataset_split"] = df["dataset_split"].str.strip().str.lower()
+
+    def get_val(split, metric):
+        row = df[df["dataset_split"] == split]
+        if row.empty:
+            print(f"WARNING: split '{split}' not found. Available: {df['dataset_split'].tolist()}")
+            return 0.0
+        if metric not in df.columns:
+            print(f"WARNING: metric '{metric}' not found. Available: {df.columns.tolist()}")
+            return 0.0
+        return float(row[metric].values[0])
+
+    return {
+        "model": "Random Forest",
+        "accuracy": get_val("test", "accuracy"),
+        "precision": get_val("test", "precision"),
+        "recall": get_val("test", "recall"),
+        "f1_score": get_val("test", "f1_score"),
+    }
 
 # ==============================
 # LOAD DATA (for confusion matrix)
@@ -106,18 +166,15 @@ def load_data():
 # RECREATE MODELS (for CM only)
 # ==============================
 def get_predictions(model_name, X_train, X_test, y_train):
-    if model_name == "Naive Bayes":
-        smote = SMOTE(random_state=42)
-        X_res, y_res = smote.fit_resample(X_train, y_train)
+    smote = SMOTE(random_state=42)
+    X_res, y_res = smote.fit_resample(X_train, y_train)
 
+    if model_name == "Naive Bayes":
         model = GaussianNB()
         model.fit(X_res, y_res)
         return model.predict(X_test)
 
     elif model_name == "SVM":
-        smote = SMOTE(random_state=42)
-        X_res, y_res = smote.fit_resample(X_train, y_train)
-
         scaler = StandardScaler()
         X_res_scaled = scaler.fit_transform(X_res)
         X_test_scaled = scaler.transform(X_test)
@@ -125,6 +182,23 @@ def get_predictions(model_name, X_train, X_test, y_train):
         model = SVC(probability=True, random_state=42)
         model.fit(X_res_scaled, y_res)
         return model.predict(X_test_scaled)
+
+    elif model_name == "Random Forest":
+        from sklearn.ensemble import RandomForestClassifier
+
+        model = RandomForestClassifier(random_state=42)
+        model.fit(X_res, y_res)
+        return model.predict(X_test)
+
+    elif model_name == "Decision Tree":
+        from sklearn.tree import DecisionTreeClassifier
+
+        model = DecisionTreeClassifier(random_state=42)
+        model.fit(X_res, y_res)
+        return model.predict(X_test)
+
+    else:
+        raise ValueError(f"Unknown model name: '{model_name}'. Check that it matches exactly.")
 
 
 # ==============================
@@ -157,8 +231,10 @@ def save_confusion_matrix(y_true, y_pred, model_name):
 def main():
     nb = extract_nb_metrics()
     svm = extract_svm_metrics()
+    dt = extract_dt_metrics()
+    rf = extract_rf_metrics()
 
-    df = pd.DataFrame([nb, svm])
+    df = pd.DataFrame([nb, svm, dt, rf])
 
     # Save comparison
     df.to_csv(OUTPUTS_DIR / "model_comparison.csv", index=False)
@@ -184,6 +260,8 @@ def main():
 
     print("NB:", nb)
     print("SVM:", svm)
+    print("DT:", dt)
+    print("RF:", rf)
 
 if __name__ == "__main__":
     main()
