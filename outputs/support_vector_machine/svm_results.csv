@@ -1,0 +1,7 @@
+Metric,Cross-Validation,Test_Set,Unseen_Data
+Accuracy,0.8095,0.7989,0.8082
+Precision,0.1125,0.1392,0.1237
+Recall,0.4304,0.6,0.48
+F1-Score,0.1778,0.2259,0.1967
+Specificity,0.8289,0.8091,0.8251
+ROC-AUC,0.7622,0.7944,0.7328

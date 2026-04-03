@@ -1,4 +1,4 @@
-# # ======================================
+# ======================================
 # Programmer: Leo Delos Reyes
 # Date Programmed: April 02, 2026
 
@@ -13,193 +13,46 @@
 # Evaluate model performance
 
 # Outputs:
-# outputs/svm_results.txt
-# # ======================================
+# outputs/svm_results.csv
+# ======================================
 
 import pandas as pd
 import numpy as np
 from pathlib import Path
 from sklearn.preprocessing import StandardScaler
 from sklearn.svm import SVC
-from sklearn.metrics import classification_report, confusion_matrix, accuracy_score, roc_auc_score, roc_curve, precision_score, recall_score, f1_score
+from sklearn.metrics import (classification_report, confusion_matrix, accuracy_score,
+                             roc_auc_score, roc_curve, precision_score, recall_score,
+                             f1_score)
 from sklearn.model_selection import StratifiedKFold
 from imblearn.over_sampling import SMOTE
 import matplotlib.pyplot as plt
 import seaborn as sns
 
 # ======================================
-# PATHS - Define the path to your data file
+# PATHS
 # ======================================
-
-# Get the current script's directory
 SCRIPT_DIR = Path(__file__).resolve().parent.parent.parent
-
-# Path to your processed data file
 DATA_PATH = SCRIPT_DIR / "data" / "processed"
 
 # Load splits
 X_train = pd.read_csv(DATA_PATH / "X_train.csv")
 X_test = pd.read_csv(DATA_PATH / "X_test.csv")
 X_unseen = pd.read_csv(DATA_PATH / "X_unseen.csv")
-
 y_train = pd.read_csv(DATA_PATH / "y_train.csv").values.ravel()
 y_test = pd.read_csv(DATA_PATH / "y_test.csv").values.ravel()
 y_unseen = pd.read_csv(DATA_PATH / "y_unseen.csv").values.ravel()
 
-# Path to store the result
+# Output directory
 OUTPUT_DIR = SCRIPT_DIR / "outputs" / "support_vector_machine"
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-OUTPUT_PATH = OUTPUT_DIR / "svm_results.txt"
-
-ROC_IMG_PATH = OUTPUT_DIR / "roc_curve_SVM.png"
-CM_IMG_PATH = OUTPUT_DIR / "confusion_matrix_SVM.png"
+OUTPUT_PATH = OUTPUT_DIR / "svm_results.csv"
 
 
 # ======================================
-# TRAIN MODEL
+# PROPER CROSS-VALIDATION WITH CORRECT PIPELINE ORDER
 # ======================================
-
-def train_model():
-    # 1. Handle imbalance with SMOTE
-    smote = SMOTE(random_state=42)
-    X_train_resampled, y_train_resampled = smote.fit_resample(X_train, y_train)
-
-    # 2. Scale data
-    scaler = StandardScaler()
-    X_train_scaled = scaler.fit_transform(X_train_resampled)
-    X_test_scaled = scaler.transform(X_test)
-
-    # 3. Train model
-    model = SVC(
-        kernel='rbf',
-        C=1.0,
-        gamma='scale',
-        probability=True,
-        random_state=42
-    )
-
-    model.fit(X_train_scaled, y_train_resampled)
-
-    # 4. Predictions
-    y_pred = model.predict(X_test_scaled)
-    y_proba = model.predict_proba(X_test_scaled)[:, 1]
-
-    return model, scaler, y_pred, y_proba
-
-# ======================================
-# SAVE RESULTS TO FILE
-# ======================================
-
-def save_results_to_file(
-    acc_test, roc_test, report_test, cm_test, precision_test, recall_test, f1_test, specificity_test,
-    acc_unseen, roc_unseen, report_unseen, cm_unseen, precision_unseen, recall_unseen, f1_unseen, specificity_unseen
-):
-    with open(OUTPUT_PATH, "w", encoding='utf-8') as f:
-        f.write("=" * 60 + "\n")
-        f.write("SVM STROKE PREDICTION RESULTS\n")
-        f.write("=" * 60 + "\n\n")
-
-        # =========================
-        # TEST SET
-        # =========================
-        f.write("TEST SET RESULTS\n")
-        f.write("-" * 40 + "\n")
-        f.write(f"Accuracy: {acc_test:.4f}\n")
-        f.write(f"Precision: {precision_test:.4f}\n")
-        f.write(f"Recall: {recall_test:.4f}\n")
-        f.write(f"F1-score: {f1_test:.4f}\n")
-        f.write(f"Specificity: {specificity_test:.4f}\n")
-        f.write(f"ROC-AUC Score: {roc_test:.4f}\n\n")
-
-        f.write("Classification Report:\n")
-        f.write(report_test + "\n")
-
-        f.write("Confusion Matrix:\n")
-        f.write(f"{cm_test}\n\n")
-
-        # =========================
-        # UNSEEN SET
-        # =========================
-        f.write("UNSEEN SET RESULTS\n")
-        f.write("-" * 40 + "\n")
-        f.write(f"Accuracy: {acc_unseen:.4f}\n")
-        f.write(f"Precision: {precision_unseen:.4f}\n")
-        f.write(f"Recall: {recall_unseen:.4f}\n")
-        f.write(f"F1-score: {f1_unseen:.4f}\n")
-        f.write(f"Specificity: {specificity_unseen:.4f}\n")
-        f.write(f"ROC-AUC Score: {roc_unseen:.4f}\n\n")
-
-        f.write("Classification Report:\n")
-        f.write(report_unseen + "\n")
-
-        f.write("Confusion Matrix:\n")
-        f.write(f"{cm_unseen}\n\n")
-
-        f.write("=" * 60 + "\n")
-        f.write("END OF REPORT\n")
-        f.write("=" * 60 + "\n")
-
-    print(" Results saved (Test + Unseen)")
-
-# ======================================
-# ROC CURVE PLOT
-# ======================================
-
-def plot_roc_curve(y_test, y_pred_proba):
-    """Plot and save ROC curve"""
-
-    fpr, tpr, thresholds = roc_curve(y_test, y_pred_proba)
-    auc_score = roc_auc_score(y_test, y_pred_proba)
-
-    # Ensure directory exists
-    ROC_IMG_PATH.parent.mkdir(parents=True, exist_ok=True)
-
-    plt.figure(figsize=(8, 6))
-    plt.plot(fpr, tpr, label=f"SVM (AUC = {auc_score:.3f})", color='blue', linewidth=2)
-    plt.plot([0, 1], [0, 1], linestyle='--', color='gray', label='Random Classifier')
-
-    plt.xlabel("False Positive Rate", fontsize=12)
-    plt.ylabel("True Positive Rate", fontsize=12)
-    plt.title("ROC Curve - Stroke Prediction (SVM)", fontsize=14)
-    plt.legend(loc="lower right", fontsize=10)
-    plt.grid(True, alpha=0.3)
-
-    # Save image
-    plt.savefig(ROC_IMG_PATH, dpi=300, bbox_inches='tight')
-    plt.close()
-
-    print(f" ROC curve saved")
-
-
-# ======================================
-# CONFUSION MATRIX PLOT
-# ======================================
-
-def plot_confusion_matrix(cm):
-    """Plot and save confusion matrix"""
-
-    # Ensure directory exists
-    CM_IMG_PATH.parent.mkdir(parents=True, exist_ok=True)
-
-    plt.figure(figsize=(8, 6))
-    sns.heatmap(cm, annot=True, fmt='d', cmap='Blues',
-                xticklabels=['No Stroke', 'Stroke'],
-                yticklabels=['No Stroke', 'Stroke'])
-    plt.title('Confusion Matrix - SVM Stroke Prediction', fontsize=14)
-    plt.ylabel('True Label', fontsize=12)
-    plt.xlabel('Predicted Label', fontsize=12)
-
-    # Save image
-    plt.savefig(CM_IMG_PATH, dpi=300, bbox_inches='tight')
-    plt.close()
-
-    print(f" Confusion matrix saved")
-
-# ======================================
-# TEN-FOLD CROSS VALIDATION
-# ======================================
-
-def cross_validate_svm(model, X, y, folds=10):
+def cross_validate_svm(X, y, folds=10):
     skf = StratifiedKFold(n_splits=folds, shuffle=True, random_state=42)
 
     metrics = {
@@ -212,100 +65,219 @@ def cross_validate_svm(model, X, y, folds=10):
     }
 
     for train_idx, val_idx in skf.split(X, y):
-        X_tr, X_val = X[train_idx], X[val_idx]
+        X_tr, X_val = X.iloc[train_idx], X.iloc[val_idx]
         y_tr, y_val = y[train_idx], y[val_idx]
 
-        model.fit(X_tr, y_tr)
-        y_pred = model.predict(X_val)
-        y_proba = model.predict_proba(X_val)[:, 1]
+        # Scale FIRST
+        scaler = StandardScaler()
+        X_tr_scaled = scaler.fit_transform(X_tr)
+        X_val_scaled = scaler.transform(X_val)
 
+        # THEN apply SMOTE on scaled training data
+        smote = SMOTE(random_state=42)
+        X_tr_resampled, y_tr_resampled = smote.fit_resample(X_tr_scaled, y_tr)
+
+        # Train model
+        model = SVC(kernel='rbf', C=1.0, gamma='scale', probability=True, random_state=42)
+        model.fit(X_tr_resampled, y_tr_resampled)
+
+        # Predictions
+        y_pred = model.predict(X_val_scaled)
+        y_proba = model.predict_proba(X_val_scaled)[:, 1]
+
+        # Calculate metrics
         cm = confusion_matrix(y_val, y_pred)
         tn, fp, fn, tp = cm.ravel()
 
         metrics['accuracy'].append(accuracy_score(y_val, y_pred))
         metrics['precision'].append(precision_score(y_val, y_pred, zero_division=0))
-        metrics['recall'].append(recall_score(y_val, y_pred))
-        metrics['f1'].append(f1_score(y_val, y_pred))
-        metrics['specificity'].append(tn / (tn + fp))
+        metrics['recall'].append(recall_score(y_val, y_pred, zero_division=0))
+        metrics['f1'].append(f1_score(y_val, y_pred, zero_division=0))
+        metrics['specificity'].append(tn / (tn + fp) if (tn + fp) > 0 else 0)
         metrics['roc_auc'].append(roc_auc_score(y_val, y_proba))
 
-    # Average metrics across folds
-    avg_metrics = {k: np.mean(v) for k, v in metrics.items()}
-    return avg_metrics
+    return {k: np.mean(v) for k, v in metrics.items()}
 
 
 # ======================================
-# MAIN EXECUTION
+# TRAIN MODEL WITH CORRECT PIPELINE ORDER
 # ======================================
+def train_model():
+    scaler = StandardScaler()
+    X_train_scaled = scaler.fit_transform(X_train)
+    X_test_scaled = scaler.transform(X_test)
+
+    smote = SMOTE(random_state=42)
+    X_train_resampled, y_train_resampled = smote.fit_resample(X_train_scaled, y_train)
+
+    # Train model
+    model = SVC(
+        kernel='rbf',
+        C=1.0,
+        gamma='scale',
+        probability=True,
+        random_state=42
+    )
+
+    model.fit(X_train_resampled, y_train_resampled)
+
+    # Predictions
+    y_pred = model.predict(X_test_scaled)
+    y_proba = model.predict_proba(X_test_scaled)[:, 1]
+
+    return model, scaler, y_pred, y_proba, y_train_resampled
+
+
+# ======================================
+# EVALUATION METRICS
+# ======================================
+def evaluate_metrics(y_true, y_pred, y_proba):
+    tn, fp, fn, tp = confusion_matrix(y_true, y_pred).ravel()
+
+    # Handle division by zero
+    specificity = tn / (tn + fp) if (tn + fp) > 0 else 0
+
+    return {
+        "accuracy": accuracy_score(y_true, y_pred),
+        "precision": precision_score(y_true, y_pred, zero_division=0),
+        "recall": recall_score(y_true, y_pred, zero_division=0),
+        "f1": f1_score(y_true, y_pred, zero_division=0),
+        "specificity": specificity,
+        "roc_auc": roc_auc_score(y_true, y_proba)
+    }
+
+
+# ======================================
+# PLOTTING FUNCTIONS
+# ======================================
+def plot_confusion_matrix(cm, dataset_name):
+    plt.figure(figsize=(8, 6))
+    sns.heatmap(cm, annot=True, fmt='d', cmap='Blues',
+                xticklabels=['No Stroke', 'Stroke'],
+                yticklabels=['No Stroke', 'Stroke'])
+    plt.title(f'Confusion Matrix - SVM Stroke Prediction ({dataset_name})', fontsize=14)
+    plt.ylabel('True Label', fontsize=12)
+    plt.xlabel('Predicted Label', fontsize=12)
+    plt.tight_layout()
+
+    # Save image
+    plt.savefig(OUTPUT_DIR / f'confusion_matrix_{dataset_name}.png', dpi=300, bbox_inches='tight')
+    plt.close()
+
+
+def plot_roc_curve(y_true, y_proba, dataset_name):
+    fpr, tpr, _ = roc_curve(y_true, y_proba)
+    auc_score = roc_auc_score(y_true, y_proba)
+
+    plt.figure(figsize=(8, 6))
+    plt.plot(fpr, tpr, label=f"SVM (AUC = {auc_score:.3f})", color='blue', linewidth=2)
+    plt.plot([0, 1], [0, 1], linestyle='--', color='gray', label='Random Classifier')
+
+    plt.xlabel("False Positive Rate", fontsize=12)
+    plt.ylabel("True Positive Rate", fontsize=12)
+    plt.title(f'ROC Curve - Stroke Prediction SVM ({dataset_name})', fontsize=14)
+    plt.legend(loc="lower right", fontsize=10)
+    plt.grid(True, alpha=0.3)
+    plt.tight_layout()
+
+    # Save image
+    plt.savefig(OUTPUT_DIR / f'roc_curve_{dataset_name}.png', dpi=300, bbox_inches='tight')
+    plt.close()
+
+
+# ======================================
+# SAVE RESULTS
+# ======================================
+def save_results_to_file(test_results, unseen_results, cv_results):
+
+    comparison = pd.DataFrame({
+        'Metric': ['Accuracy', 'Precision', 'Recall', 'F1-Score', 'Specificity', 'ROC-AUC'],
+        'Cross-Validation': [
+            round(cv_results['accuracy'], 4),
+            round(cv_results['precision'], 4),
+            round(cv_results['recall'], 4),
+            round(cv_results['f1'], 4),
+            round(cv_results['specificity'], 4),
+            round(cv_results['roc_auc'], 4)
+        ],
+        'Test_Set': [
+            round(test_results['accuracy'], 4),
+            round(test_results['precision'], 4),
+            round(test_results['recall'], 4),
+            round(test_results['f1'], 4),
+            round(test_results['specificity'], 4),
+            round(test_results['roc_auc'], 4)
+        ],
+        'Unseen_Data': [
+            round(unseen_results['accuracy'], 4),
+            round(unseen_results['precision'], 4),
+            round(unseen_results['recall'], 4),
+            round(unseen_results['f1'], 4),
+            round(unseen_results['specificity'], 4),
+            round(unseen_results['roc_auc'], 4)
+        ]
+    })
+
+    comparison.to_csv(OUTPUT_PATH, index=False)
+    print(f"\n   Results saved to {OUTPUT_PATH}")
+
+    # Print formatted results table
+    print("\n" + "=" * 70)
+    print("SVM RESULTS SUMMARY")
+    print("=" * 70)
+    print(comparison.to_string(index=False))
+    print("=" * 70)
+
+
 def main():
-    # 1. Train the model on training data (with SMOTE)
-    model, scaler, y_test_pred, y_test_proba = train_model()
+    print("\n" + "=" * 60)
+    print("SUPPORT VECTOR MACHINE - STROKE PREDICTION")
+    print("=" * 60)
 
-    # ====================================================
-    # TEST SET EVALUATION
-    # ====================================================
-    acc_test = accuracy_score(y_test, y_test_pred)
-    roc_test = roc_auc_score(y_test, y_test_proba)
+    # 1. Train the model with correct pipeline order
+    print("\n   Training SVM model...")
+    model, scaler, y_test_pred, y_test_proba, y_train_resampled = train_model()
+
+    # 2. Test Set Evaluation
+    print("\n   Evaluating on TEST set...")
+    test_results = evaluate_metrics(y_test, y_test_pred, y_test_proba)
     cm_test = confusion_matrix(y_test, y_test_pred)
-    report_test = classification_report(y_test, y_test_pred)
 
-    tn, fp, fn, tp = cm_test.ravel()
-    precision_test = precision_score(y_test, y_test_pred, zero_division=0)
-    recall_test = recall_score(y_test, y_test_pred, zero_division=0)
-    f1_test = f1_score(y_test, y_test_pred, zero_division=0)
-    specificity_test = tn / (tn + fp)
+    # Generate plots for test set
+    plot_confusion_matrix(cm_test, "test")
+    plot_roc_curve(y_test, y_test_proba, "test")
 
-    print("SVM Test Set Results")
-    print("===================")
-    print(f"Accuracy: {acc_test:.4f}")
-    print(f"Precision: {precision_test:.4f}")
-    print(f"Recall: {recall_test:.4f}")
-    print(f"F1-score: {f1_test:.4f}")
-    print(f"Specificity: {specificity_test:.4f}")
-    print(f"ROC-AUC: {roc_test:.4f}")
-    print("\nConfusion Matrix:")
-    print(cm_test)
-    print(report_test)
-
-    plot_roc_curve(y_test, y_test_proba)
-    plot_confusion_matrix(cm_test)
-
-    # ====================================================
-    # UNSEEN SET EVALUATION
-    # ====================================================
+    # 3. Unseen Set Evaluation
+    print("\n   Evaluating on UNSEEN set...")
     X_unseen_scaled = scaler.transform(X_unseen)
     y_unseen_pred = model.predict(X_unseen_scaled)
     y_unseen_proba = model.predict_proba(X_unseen_scaled)[:, 1]
 
-    acc_unseen = accuracy_score(y_unseen, y_unseen_pred)
-    roc_unseen = roc_auc_score(y_unseen, y_unseen_proba)
+    unseen_results = evaluate_metrics(y_unseen, y_unseen_pred, y_unseen_proba)
     cm_unseen = confusion_matrix(y_unseen, y_unseen_pred)
-    report_unseen = classification_report(y_unseen, y_unseen_pred)
 
-    tn, fp, fn, tp = cm_unseen.ravel()
-    precision_unseen = tp / (tp + fp)
-    recall_unseen = tp / (tp + fn)
-    f1_unseen = 2 * (precision_unseen * recall_unseen) / (precision_unseen + recall_unseen)
-    specificity_unseen = tn / (tn + fp)
+    # Generate plots for unseen set
+    plot_confusion_matrix(cm_unseen, "unseen")
+    plot_roc_curve(y_unseen, y_unseen_proba, "unseen")
 
-    print("\nSVM Unseen Set Results")
-    print("=====================")
-    print(f"Accuracy: {acc_unseen:.4f}")
-    print(f"Precision: {precision_unseen:.4f}")
-    print(f"Recall: {recall_unseen:.4f}")
-    print(f"F1-score: {f1_unseen:.4f}")
-    print(f"Specificity: {specificity_unseen:.4f}")
-    print(f"ROC-AUC: {roc_unseen:.4f}")
-    print("\nConfusion Matrix:")
-    print(cm_unseen)
-    print(report_unseen)
+    # 4. Cross-Validation (using correct pipeline order)
+    print("\n   Performing 10-fold cross-validation...")
+    cv_results = cross_validate_svm(X_train, y_train)
 
-    save_results_to_file(
-        acc_test, roc_test, report_test, cm_test,
-        precision_test, recall_test, f1_test, specificity_test,
-        acc_unseen, roc_unseen, report_unseen, cm_unseen,
-        precision_unseen, recall_unseen, f1_unseen, specificity_unseen
-    )
+    # 5. Save all results
+    save_results_to_file(test_results, unseen_results, cv_results)
+
+    # 6. Print classification reports
+    print("\n   Detailed Classification Report - TEST SET:")
+    print(classification_report(y_test, y_test_pred, target_names=['No Stroke', 'Stroke']))
+
+    print("\n   Detailed Classification Report - UNSEEN SET:")
+    print(classification_report(y_unseen, y_unseen_pred, target_names=['No Stroke', 'Stroke']))
+
+    print("\n   SVM Analysis Complete!")
+    print(f"   All outputs saved to: {OUTPUT_DIR}")
+
+
 # ======================================
 # RUN THE SCRIPT
 # ======================================
