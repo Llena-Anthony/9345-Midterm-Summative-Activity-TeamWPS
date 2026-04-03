@@ -21,7 +21,8 @@ import numpy as np
 from pathlib import Path
 from sklearn.preprocessing import StandardScaler
 from sklearn.svm import SVC
-from sklearn.metrics import classification_report, confusion_matrix, accuracy_score, roc_auc_score, roc_curve
+from sklearn.metrics import classification_report, confusion_matrix, accuracy_score, roc_auc_score, roc_curve, precision_score, recall_score, f1_score
+from sklearn.model_selection import StratifiedKFold
 from imblearn.over_sampling import SMOTE
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -59,15 +60,13 @@ CM_IMG_PATH = OUTPUT_DIR / "confusion_matrix_SVM.png"
 # ======================================
 
 def train_model():
-    print("\nTraining SVM using provided split...")
-
     # 1. Handle imbalance with SMOTE
     smote = SMOTE(random_state=42)
     X_train_resampled, y_train_resampled = smote.fit_resample(X_train, y_train)
 
     # 2. Scale data
     scaler = StandardScaler()
-    X_train_scaled = scaler.fit_transform(X_train_resampled)  # ✅ use resampled data
+    X_train_scaled = scaler.fit_transform(X_train_resampled)
     X_test_scaled = scaler.transform(X_test)
 
     # 3. Train model
@@ -79,7 +78,7 @@ def train_model():
         random_state=42
     )
 
-    model.fit(X_train_scaled, y_train_resampled)  # ✅ fit with resampled labels
+    model.fit(X_train_scaled, y_train_resampled)
 
     # 4. Predictions
     y_pred = model.predict(X_test_scaled)
@@ -91,40 +90,60 @@ def train_model():
 # SAVE RESULTS TO FILE
 # ======================================
 
-def save_results_to_file(acc, roc, report, cm, precision, recall, f1, specificity):
+def save_results_to_file(
+    acc_test, roc_test, report_test, cm_test, precision_test, recall_test, f1_test, specificity_test,
+    acc_unseen, roc_unseen, report_unseen, cm_unseen, precision_unseen, recall_unseen, f1_unseen, specificity_unseen
+):
     with open(OUTPUT_PATH, "w", encoding='utf-8') as f:
         f.write("=" * 60 + "\n")
         f.write("SVM STROKE PREDICTION RESULTS\n")
         f.write("=" * 60 + "\n\n")
 
-        f.write("PERFORMANCE METRICS\n")
+        # =========================
+        # TEST SET
+        # =========================
+        f.write("TEST SET RESULTS\n")
         f.write("-" * 40 + "\n")
-        f.write(f"Accuracy: {acc:.4f}\n")
-        f.write(f"Precision: {precision:.4f}\n")
-        f.write(f"Recall: {recall:.4f}\n")
-        f.write(f"F1-score: {f1:.4f}\n")
-        f.write(f"Specificity: {specificity:.4f}\n")
-        f.write(f"ROC-AUC Score: {roc:.4f}\n\n")
+        f.write(f"Accuracy: {acc_test:.4f}\n")
+        f.write(f"Precision: {precision_test:.4f}\n")
+        f.write(f"Recall: {recall_test:.4f}\n")
+        f.write(f"F1-score: {f1_test:.4f}\n")
+        f.write(f"Specificity: {specificity_test:.4f}\n")
+        f.write(f"ROC-AUC Score: {roc_test:.4f}\n\n")
 
-        f.write("CLASSIFICATION REPORT\n")
+        f.write("Classification Report:\n")
+        f.write(report_test + "\n")
+
+        f.write("Confusion Matrix:\n")
+        f.write(f"{cm_test}\n\n")
+
+        # =========================
+        # UNSEEN SET
+        # =========================
+        f.write("UNSEEN SET RESULTS\n")
         f.write("-" * 40 + "\n")
-        f.write(report + "\n")
+        f.write(f"Accuracy: {acc_unseen:.4f}\n")
+        f.write(f"Precision: {precision_unseen:.4f}\n")
+        f.write(f"Recall: {recall_unseen:.4f}\n")
+        f.write(f"F1-score: {f1_unseen:.4f}\n")
+        f.write(f"Specificity: {specificity_unseen:.4f}\n")
+        f.write(f"ROC-AUC Score: {roc_unseen:.4f}\n\n")
 
+        f.write("Classification Report:\n")
+        f.write(report_unseen + "\n")
 
-        f.write("CONFUSION MATRIX\n")
-        f.write("-" * 40 + "\n")
-        f.write(f"Matrix:\n{cm}\n\n")
+        f.write("Confusion Matrix:\n")
+        f.write(f"{cm_unseen}\n\n")
 
         f.write("=" * 60 + "\n")
         f.write("END OF REPORT\n")
         f.write("=" * 60 + "\n")
 
-    print("Results saved")
+    print(" Results saved (Test + Unseen)")
 
-
-# ============================================================================
+# ======================================
 # ROC CURVE PLOT
-# ============================================================================
+# ======================================
 
 def plot_roc_curve(y_test, y_pred_proba):
     """Plot and save ROC curve"""
@@ -152,9 +171,9 @@ def plot_roc_curve(y_test, y_pred_proba):
     print(f" ROC curve saved")
 
 
-# ============================================================================
+# ======================================
 # CONFUSION MATRIX PLOT
-# ============================================================================
+# ======================================
 
 def plot_confusion_matrix(cm):
     """Plot and save confusion matrix"""
@@ -176,43 +195,120 @@ def plot_confusion_matrix(cm):
 
     print(f" Confusion matrix saved")
 
+# ======================================
+# TEN-FOLD CROSS VALIDATION
+# ======================================
 
-# ============================================================================
+def cross_validate_svm(model, X, y, folds=10):
+    skf = StratifiedKFold(n_splits=folds, shuffle=True, random_state=42)
+
+    metrics = {
+        'accuracy': [],
+        'precision': [],
+        'recall': [],
+        'f1': [],
+        'specificity': [],
+        'roc_auc': []
+    }
+
+    for train_idx, val_idx in skf.split(X, y):
+        X_tr, X_val = X[train_idx], X[val_idx]
+        y_tr, y_val = y[train_idx], y[val_idx]
+
+        model.fit(X_tr, y_tr)
+        y_pred = model.predict(X_val)
+        y_proba = model.predict_proba(X_val)[:, 1]
+
+        cm = confusion_matrix(y_val, y_pred)
+        tn, fp, fn, tp = cm.ravel()
+
+        metrics['accuracy'].append(accuracy_score(y_val, y_pred))
+        metrics['precision'].append(precision_score(y_val, y_pred, zero_division=0))
+        metrics['recall'].append(recall_score(y_val, y_pred))
+        metrics['f1'].append(f1_score(y_val, y_pred))
+        metrics['specificity'].append(tn / (tn + fp))
+        metrics['roc_auc'].append(roc_auc_score(y_val, y_proba))
+
+    # Average metrics across folds
+    avg_metrics = {k: np.mean(v) for k, v in metrics.items()}
+    return avg_metrics
+
+
+# ======================================
 # MAIN EXECUTION
-# ============================================================================
+# ======================================
 def main():
-    model, scaler, y_pred, y_proba = train_model()
+    # 1. Train the model on training data (with SMOTE)
+    model, scaler, y_test_pred, y_test_proba = train_model()
 
-    acc = accuracy_score(y_test, y_pred)
-    roc = roc_auc_score(y_test, y_proba)
-    cm = confusion_matrix(y_test, y_pred)
-    report = classification_report(y_test, y_pred)
+    # ====================================================
+    # TEST SET EVALUATION
+    # ====================================================
+    acc_test = accuracy_score(y_test, y_test_pred)
+    roc_test = roc_auc_score(y_test, y_test_proba)
+    cm_test = confusion_matrix(y_test, y_test_pred)
+    report_test = classification_report(y_test, y_test_pred)
 
-    tn, fp, fn, tp = cm.ravel()
+    tn, fp, fn, tp = cm_test.ravel()
+    precision_test = precision_score(y_test, y_test_pred, zero_division=0)
+    recall_test = recall_score(y_test, y_test_pred, zero_division=0)
+    f1_test = f1_score(y_test, y_test_pred, zero_division=0)
+    specificity_test = tn / (tn + fp)
 
-    precision = tp / (tp + fp)
-    recall = tp / (tp + fn)
-    f1 = 2 * (precision * recall) / (precision + recall)
-    specificity = tn / (tn + fp)
-
-    print(f"Precision: {precision:.4f}")
-    print(f"Recall: {recall:.4f}")
-    print(f"F1-score: {f1:.4f}")
-    print(f"Specificity: {specificity:.4f}")
-
-    print(f"\nAccuracy: {acc:.4f}")
-    print(f"ROC-AUC: {roc:.4f}")
+    print("SVM Test Set Results")
+    print("===================")
+    print(f"Accuracy: {acc_test:.4f}")
+    print(f"Precision: {precision_test:.4f}")
+    print(f"Recall: {recall_test:.4f}")
+    print(f"F1-score: {f1_test:.4f}")
+    print(f"Specificity: {specificity_test:.4f}")
+    print(f"ROC-AUC: {roc_test:.4f}")
     print("\nConfusion Matrix:")
-    print(cm)
+    print(cm_test)
+    print(report_test)
 
-    save_results_to_file(acc, roc, report, cm, precision, recall, f1, specificity)
+    plot_roc_curve(y_test, y_test_proba)
+    plot_confusion_matrix(cm_test)
 
-    plot_roc_curve(y_test, y_proba)
-    plot_confusion_matrix(cm)
+    # ====================================================
+    # UNSEEN SET EVALUATION
+    # ====================================================
+    X_unseen_scaled = scaler.transform(X_unseen)
+    y_unseen_pred = model.predict(X_unseen_scaled)
+    y_unseen_proba = model.predict_proba(X_unseen_scaled)[:, 1]
 
-# ============================================================================
+    acc_unseen = accuracy_score(y_unseen, y_unseen_pred)
+    roc_unseen = roc_auc_score(y_unseen, y_unseen_proba)
+    cm_unseen = confusion_matrix(y_unseen, y_unseen_pred)
+    report_unseen = classification_report(y_unseen, y_unseen_pred)
+
+    tn, fp, fn, tp = cm_unseen.ravel()
+    precision_unseen = tp / (tp + fp)
+    recall_unseen = tp / (tp + fn)
+    f1_unseen = 2 * (precision_unseen * recall_unseen) / (precision_unseen + recall_unseen)
+    specificity_unseen = tn / (tn + fp)
+
+    print("\nSVM Unseen Set Results")
+    print("=====================")
+    print(f"Accuracy: {acc_unseen:.4f}")
+    print(f"Precision: {precision_unseen:.4f}")
+    print(f"Recall: {recall_unseen:.4f}")
+    print(f"F1-score: {f1_unseen:.4f}")
+    print(f"Specificity: {specificity_unseen:.4f}")
+    print(f"ROC-AUC: {roc_unseen:.4f}")
+    print("\nConfusion Matrix:")
+    print(cm_unseen)
+    print(report_unseen)
+
+    save_results_to_file(
+        acc_test, roc_test, report_test, cm_test,
+        precision_test, recall_test, f1_test, specificity_test,
+        acc_unseen, roc_unseen, report_unseen, cm_unseen,
+        precision_unseen, recall_unseen, f1_unseen, specificity_unseen
+    )
+# ======================================
 # RUN THE SCRIPT
-# ============================================================================
+# ======================================
 
 if __name__ == "__main__":
     main()
