@@ -19,218 +19,112 @@
 import pandas as pd
 import numpy as np
 from pathlib import Path
-from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 from sklearn.svm import SVC
 from sklearn.metrics import classification_report, confusion_matrix, accuracy_score, roc_auc_score, roc_curve
-from sklearn.utils.class_weight import compute_class_weight
-from sklearn.metrics import roc_curve
+from imblearn.over_sampling import SMOTE
 import matplotlib.pyplot as plt
 import seaborn as sns
-import joblib
 
-# ============================================================================
+# ======================================
 # PATHS - Define the path to your data file
-# ============================================================================
+# ======================================
 
 # Get the current script's directory
 SCRIPT_DIR = Path(__file__).resolve().parent.parent.parent
 
 # Path to your processed data file
-DATA_PATH = SCRIPT_DIR / "data" / "processed" / "cleaned_stroke_data.csv"
+DATA_PATH = SCRIPT_DIR / "data" / "processed"
 
-#Path to store the result
-OUTPUT_PATH = SCRIPT_DIR / "data" / "outputs" / "svm_results.txt"
+# Load splits
+X_train = pd.read_csv(DATA_PATH / "X_train.csv")
+X_test = pd.read_csv(DATA_PATH / "X_test.csv")
+X_unseen = pd.read_csv(DATA_PATH / "X_unseen.csv")
+
+y_train = pd.read_csv(DATA_PATH / "y_train.csv").values.ravel()
+y_test = pd.read_csv(DATA_PATH / "y_test.csv").values.ravel()
+y_unseen = pd.read_csv(DATA_PATH / "y_unseen.csv").values.ravel()
+
+# Path to store the result
+OUTPUT_PATH = SCRIPT_DIR / "outputs" / "svm_results.txt"
 OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
 
-ROC_IMG_PATH = SCRIPT_DIR / "data" / "outputs" / "roc_curve.png"
-
-# ============================================================================
-# LOAD DATA
-# ============================================================================
-
-def load_data():
-    """Load the stroke dataset"""
-    if not DATA_PATH.exists():
-        raise FileNotFoundError(f"Data file not found at: {DATA_PATH}")
-
-    df = pd.read_csv(DATA_PATH)
-    print(f" Data loaded from: {DATA_PATH}")
-    print(f" Shape: {df.shape}")
-    print(f" Columns: {df.columns.tolist()}")
-    return df
+ROC_IMG_PATH = SCRIPT_DIR / "outputs" / "roc_curve_SVM.png"
+CM_IMG_PATH = SCRIPT_DIR / "outputs" / "confusion_matrix_SVM.png"
 
 
-# ============================================================================
+# ======================================
 # TRAIN MODEL
-# ============================================================================
+# ======================================
 
-def train_model(df):
-    """Train the SVM model"""
-    print("\n" + "=" * 60)
-    print("TRAINING SVM MODEL")
-    print("=" * 60)
+def train_model():
+    print("\nTraining SVM using provided split...")
 
-    # Separate features and target
-    X = df.drop('stroke', axis=1)
-    y = df['stroke']
+    # 1. Handle imbalance with SMOTE
+    smote = SMOTE(random_state=42)
+    X_train_resampled, y_train_resampled = smote.fit_resample(X_train, y_train)
 
-    print(f"\nFeatures shape: {X.shape}")
-    print(f"Target distribution:\n{y.value_counts()}")
-    print(f"Stroke percentage: {y.mean() * 100:.2f}%")
-
-    # Handle class imbalance
-    class_weights = compute_class_weight('balanced', classes=np.unique(y), y=y)
-    class_weight_dict = {0: class_weights[0], 1: class_weights[1]}
-    print(f"\nClass weights: {class_weight_dict}")
-
-    # Split the data
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=0.2, random_state=42, stratify=y
-    )
-
-    print(f"\nTraining set size: {X_train.shape[0]}")
-    print(f"Test set size: {X_test.shape[0]}")
-
-    # Scale features
+    # 2. Scale data
     scaler = StandardScaler()
-    X_train_scaled = scaler.fit_transform(X_train)
+    X_train_scaled = scaler.fit_transform(X_train_resampled)  # ✅ use resampled data
     X_test_scaled = scaler.transform(X_test)
 
-    # Train SVM
-    svm_model = SVC(
+    # 3. Train model
+    model = SVC(
         kernel='rbf',
         C=1.0,
         gamma='scale',
-        class_weight=class_weight_dict,
-        random_state=42,
-        probability=True
+        probability=True,
+        random_state=42
     )
 
-    svm_model.fit(X_train_scaled, y_train)
+    model.fit(X_train_scaled, y_train_resampled)  # ✅ fit with resampled labels
 
-    # Evaluate
-    y_pred = svm_model.predict(X_test_scaled)
-    y_pred_proba = svm_model.predict_proba(X_test_scaled)[:, 1]
+    # 4. Predictions
+    y_pred = model.predict(X_test_scaled)
+    y_proba = model.predict_proba(X_test_scaled)[:, 1]
 
-    print(f"\n Model Performance:")
-    print(f"   Accuracy: {accuracy_score(y_test, y_pred):.4f}")
-    print(f"   ROC-AUC: {roc_auc_score(y_test, y_pred_proba):.4f}")
+    return model, scaler, y_pred, y_proba
 
-    print("\nClassification Report:")
-    print(classification_report(y_test, y_pred, target_names=['No Stroke', 'Stroke']))
+# ======================================
+# SAVE RESULTS TO FILE
+# ======================================
 
-    print("\nConfusion Matrix:")
-    cm = confusion_matrix(y_test, y_pred)
-    print(cm)
-
-    acc = accuracy_score(y_test, y_pred)
-    roc = roc_auc_score(y_test, y_pred_proba)
-    report = classification_report(y_test, y_pred)
-    cm = confusion_matrix(y_test, y_pred)
-
-    # Write results to file
-    OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
-    with open(OUTPUT_PATH, "w") as f:
+def save_results_to_file(acc, roc, report, cm, precision, recall, f1, specificity):
+    with open(OUTPUT_PATH, "w", encoding='utf-8') as f:
+        f.write("=" * 60 + "\n")
         f.write("SVM STROKE PREDICTION RESULTS\n")
         f.write("=" * 60 + "\n\n")
 
+        f.write("PERFORMANCE METRICS\n")
+        f.write("-" * 40 + "\n")
         f.write(f"Accuracy: {acc:.4f}\n")
-        f.write(f"ROC-AUC: {roc:.4f}\n\n")
+        f.write(f"Precision: {precision:.4f}\n")
+        f.write(f"Recall: {recall:.4f}\n")
+        f.write(f"F1-score: {f1:.4f}\n")
+        f.write(f"Specificity: {specificity:.4f}\n")
+        f.write(f"ROC-AUC Score: {roc:.4f}\n\n")
 
-        f.write("Classification Report:\n")
+        f.write("CLASSIFICATION REPORT\n")
+        f.write("-" * 40 + "\n")
         f.write(report + "\n")
 
-        f.write("Confusion Matrix:\n")
-        f.write(str(cm) + "\n")
 
-    print(f"\n Results saved to: {OUTPUT_PATH}")
+        f.write("CONFUSION MATRIX\n")
+        f.write("-" * 40 + "\n")
+        f.write(f"Matrix:\n{cm}\n\n")
 
-    return svm_model, scaler, X.columns, X_test_scaled, y_test, y_pred_proba
+        f.write("=" * 60 + "\n")
+        f.write("END OF REPORT\n")
+        f.write("=" * 60 + "\n")
 
+    print("Results saved")
 
-# ============================================================================
-# PREDICTION FUNCTION
-# ============================================================================
-
-def predict_stroke(model, scaler, feature_names, patient_data):
-    """
-    Predict stroke for a single patient
-
-    Args:
-        model: Trained SVM model
-        scaler: Fitted StandardScaler
-        feature_names: List of feature names in correct order
-        patient_data: Dictionary with patient features (use original column names)
-
-    Returns:
-        prediction: 0 or 1 (no stroke or stroke)
-        probability: Probability of stroke (0-1)
-    """
-    # Create feature array in the correct order
-    features = np.array([[patient_data[feature] for feature in feature_names]])
-
-    # Convert to DataFrame with column names to avoid warnings
-    features_df = pd.DataFrame(features, columns=feature_names)
-
-    # Scale features
-    features_scaled = scaler.transform(features_df)
-
-    # Make prediction
-    prediction = model.predict(features_scaled)[0]
-    probability = model.predict_proba(features_scaled)[0][1]
-
-    return prediction, probability
-
-
-# ============================================================================
-# EXAMPLE PREDICTIONS
-# ============================================================================
-
-def test_predictions(model, scaler, feature_names, df):
-    """Test predictions on sample data"""
-    print("\n" + "=" * 60)
-    print("EXAMPLE PREDICTIONS")
-    print("=" * 60)
-
-    # Calculate a better threshold based on data distribution
-    # For stroke prediction, use a lower threshold since stroke is rare
-    risk_thresholds = {
-        'high': 0.3,  # 30% or higher
-        'moderate': 0.15,  # 15-30%
-        'low': 0.05  # 5-15%
-    }
-
-    # Test on first 5 rows of the dataset
-    for i in range(min(5, len(df))):
-        sample = df.iloc[i]
-
-        # Create patient data dictionary
-        patient = {col: sample[col] for col in feature_names}
-
-        # Make prediction
-        pred, prob = predict_stroke(model, scaler, feature_names, patient)
-
-        print(f"\nPatient {i + 1}:")
-        print(f"  Age: {sample['age']}, BMI: {sample['bmi']:.1f}, Glucose: {sample['avg_glucose_level']:.1f}")
-        print(f"  Hypertension: {sample['hypertension']}, Heart Disease: {sample['heart_disease']}")
-        print(f"  Actual stroke: {sample['stroke']}")
-        print(f"  Predicted stroke: {pred}")
-        print(f"  Probability of stroke: {prob:.4f}")
-
-        # Updated risk assessment with more appropriate thresholds
-        if prob >= risk_thresholds['high']:
-            print(f"  HIGH RISK - Probability {prob:.1%}")
-        elif prob >= risk_thresholds['moderate']:
-            print(f"  MODERATE RISK - Probability {prob:.1%}")
-        elif prob >= risk_thresholds['low']:
-            print(f"  LOW RISK - Probability {prob:.1%}")
-        else:
-            print(f"  VERY LOW RISK - Probability {prob:.1%}")
 
 # ============================================================================
 # ROC CURVE PLOT
 # ============================================================================
+
 def plot_roc_curve(y_test, y_pred_proba):
     """Plot and save ROC curve"""
 
@@ -241,61 +135,79 @@ def plot_roc_curve(y_test, y_pred_proba):
     ROC_IMG_PATH.parent.mkdir(parents=True, exist_ok=True)
 
     plt.figure(figsize=(8, 6))
-    plt.plot(fpr, tpr, label=f"SVM (AUC = {auc_score:.2f})", color='blue')
-    plt.plot([0, 1], [0, 1], linestyle='--', color='gray')  # random baseline
+    plt.plot(fpr, tpr, label=f"SVM (AUC = {auc_score:.3f})", color='blue', linewidth=2)
+    plt.plot([0, 1], [0, 1], linestyle='--', color='gray', label='Random Classifier')
 
-    plt.xlabel("False Positive Rate")
-    plt.ylabel("True Positive Rate")
-    plt.title("ROC Curve - Stroke Prediction")
-    plt.legend(loc="lower right")
+    plt.xlabel("False Positive Rate", fontsize=12)
+    plt.ylabel("True Positive Rate", fontsize=12)
+    plt.title("ROC Curve - Stroke Prediction (SVM)", fontsize=14)
+    plt.legend(loc="lower right", fontsize=10)
+    plt.grid(True, alpha=0.3)
 
     # Save image
-    plt.savefig(ROC_IMG_PATH)
+    plt.savefig(ROC_IMG_PATH, dpi=300, bbox_inches='tight')
     plt.close()
 
-    print(f" ROC curve saved to: {ROC_IMG_PATH}")
+    print(f" ROC curve saved")
+
+
+# ============================================================================
+# CONFUSION MATRIX PLOT
+# ============================================================================
+
+def plot_confusion_matrix(cm):
+    """Plot and save confusion matrix"""
+
+    # Ensure directory exists
+    CM_IMG_PATH.parent.mkdir(parents=True, exist_ok=True)
+
+    plt.figure(figsize=(8, 6))
+    sns.heatmap(cm, annot=True, fmt='d', cmap='Blues',
+                xticklabels=['No Stroke', 'Stroke'],
+                yticklabels=['No Stroke', 'Stroke'])
+    plt.title('Confusion Matrix - SVM Stroke Prediction', fontsize=14)
+    plt.ylabel('True Label', fontsize=12)
+    plt.xlabel('Predicted Label', fontsize=12)
+
+    # Save image
+    plt.savefig(CM_IMG_PATH, dpi=300, bbox_inches='tight')
+    plt.close()
+
+    print(f" Confusion matrix saved")
+
 
 # ============================================================================
 # MAIN EXECUTION
 # ============================================================================
-
 def main():
-    """Main execution function"""
-    print("=" * 60)
-    print("STROKE PREDICTION SVM MODEL")
-    print("=" * 60)
+    model, scaler, y_pred, y_proba = train_model()
 
-    try:
-        # Load data
-        df = load_data()
+    acc = accuracy_score(y_test, y_pred)
+    roc = roc_auc_score(y_test, y_proba)
+    cm = confusion_matrix(y_test, y_pred)
+    report = classification_report(y_test, y_pred)
 
-        # Train model
-        model, scaler, feature_names, X_test_scaled, y_test, y_pred_proba = train_model(df)
+    tn, fp, fn, tp = cm.ravel()
 
-        plot_roc_curve(y_test, y_pred_proba)
+    precision = tp / (tp + fp)
+    recall = tp / (tp + fn)
+    f1 = 2 * (precision * recall) / (precision + recall)
+    specificity = tn / (tn + fp)
 
-        # Test predictions
-        test_predictions(model, scaler, feature_names, df)
+    print(f"Precision: {precision:.4f}")
+    print(f"Recall: {recall:.4f}")
+    print(f"F1-score: {f1:.4f}")
+    print(f"Specificity: {specificity:.4f}")
 
-        print("\n" + "=" * 60)
-        print("MODEL TRAINING COMPLETE!")
-        print("=" * 60)
+    print(f"\nAccuracy: {acc:.4f}")
+    print(f"ROC-AUC: {roc:.4f}")
+    print("\nConfusion Matrix:")
+    print(cm)
 
-    except FileNotFoundError as e:
-        print(f"\nError: {e}")
-        print("\nPlease make sure your data file is at:")
-        print(f"  {DATA_PATH}")
-        print("\nYour project structure should look like:")
-        print("  your_project/")
-        print("  ├── stroke_prediction.py  (this file)")
-        print("  └── data/")
-        print("      └── processed/")
-        print("          └── cleaned_stroke_data.csv")
+    save_results_to_file(acc, roc, report, cm, precision, recall, f1, specificity)
 
-    except Exception as e:
-        print(f"\nUnexpected error: {e}")
-        raise
-
+    plot_roc_curve(y_test, y_proba)
+    plot_confusion_matrix(cm)
 
 # ============================================================================
 # RUN THE SCRIPT
