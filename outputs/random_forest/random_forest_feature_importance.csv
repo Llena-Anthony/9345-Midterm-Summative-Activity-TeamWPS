@@ -1,0 +1,17 @@
+feature,importance
+age,0.4881
+avg_glucose_level,0.1479
+bmi,0.1356
+hypertension,0.0411
+ever_married_Yes,0.04
+work_type_children,0.0233
+heart_disease,0.0231
+work_type_Self-employed,0.0173
+Residence_type_Urban,0.0172
+smoking_status_never smoked,0.0165
+gender_Male,0.0146
+work_type_Private,0.0129
+smoking_status_formerly smoked,0.012
+smoking_status_smokes,0.0103
+work_type_Never_worked,0.0001
+gender_Other,0.0
